@@ -13,7 +13,7 @@ from nonebot.adapters.onebot.v11 import (
 from nonebot.rule import Rule
 
 from .config import plugin_config
-from .models import LikeSource
+from .models import LikeResult, LikeSource, LikeStatus
 from .service import (
     handle_instant_like,
     handle_subscribe,
@@ -109,6 +109,54 @@ def extract_target_user_id(event: GroupMessageEvent) -> int | None:
     return int(match.group(0))
 
 
+def build_like_me_message(result: LikeResult) -> str:
+    """生成“赞我”回复文案。"""
+
+    if result.status == LikeStatus.NOT_FRIEND:
+        return "⚠️ 需要先加好友才能点赞"
+    if result.status == LikeStatus.SUCCESS:
+        return f"👍 已经给你点了 {result.total} 个赞"
+    if result.status == LikeStatus.LIMIT_REACHED:
+        return "🌟 今天赞不了你更多了喵~"
+    return "💥 点赞失败了喵~"
+
+
+def build_like_other_message(
+    target_user_id: int,
+    result: LikeResult,
+) -> Message | str:
+    """生成“赞他”回复文案。"""
+
+    if result.status == LikeStatus.NOT_FRIEND:
+        return Message(
+            [
+                MessageSegment.text("⚠️ 请先让 "),
+                MessageSegment.at(target_user_id),
+                MessageSegment.text(" 添加机器人为好友后再点赞"),
+            ]
+        )
+
+    if result.status == LikeStatus.SUCCESS:
+        return Message(
+            [
+                MessageSegment.text("👍 已经给 "),
+                MessageSegment.at(target_user_id),
+                MessageSegment.text(f" 点了 {result.total} 个赞"),
+            ]
+        )
+
+    if result.status == LikeStatus.LIMIT_REACHED:
+        return Message(
+            [
+                MessageSegment.text("🌟 今天赞不了 "),
+                MessageSegment.at(target_user_id),
+                MessageSegment.text(" 更多了喵~"),
+            ]
+        )
+
+    return "💥 点赞失败了喵~"
+
+
 like_me = on_message(rule=Rule(is_like_me), priority=5, block=True)
 like_other = on_message(rule=Rule(is_like_other), priority=5, block=True)
 like_subscribe = on_message(rule=Rule(is_subscribe), priority=5, block=True)
@@ -125,7 +173,7 @@ async def handle_like_me(bot: Bot, event: MessageEvent):
     """处理“赞我”命令。"""
 
     result = await handle_instant_like(bot, event.user_id)
-    await like_me.finish(result.message)
+    await like_me.finish(build_like_me_message(result))
 
 
 @like_other.handle()
@@ -141,33 +189,7 @@ async def handle_like_other(bot: Bot, event: GroupMessageEvent):
         target_user_id,
         source=LikeSource.INSTANT,
     )
-    if not result.is_friend:
-        reply = Message(
-            [
-                MessageSegment.text("⚠️ 请先让 "),
-                MessageSegment.at(target_user_id),
-                MessageSegment.text(" 添加机器人为好友后再点赞"),
-            ]
-        )
-        await like_other.finish(reply)
-
-    if result.success:
-        reply = Message(
-            [
-                MessageSegment.text("👍 已经给 "),
-                MessageSegment.at(target_user_id),
-                MessageSegment.text(f" 点了 {result.total} 个赞"),
-            ]
-        )
-        await like_other.finish(reply)
-
-    reply = Message(
-        [
-            MessageSegment.text("🌟 今天赞不了 "),
-            MessageSegment.at(target_user_id),
-            MessageSegment.text(" 更多了喵~"),
-        ]
-    )
+    reply = build_like_other_message(target_user_id, result)
     await like_other.finish(reply)
 
 

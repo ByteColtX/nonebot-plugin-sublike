@@ -8,7 +8,13 @@ from nonebot import logger
 from nonebot.adapters.onebot.v11 import Bot
 
 from .config import plugin_config
-from .models import LikeResult, LikeSource, SubscriptionRecord, UserLikeStats
+from .models import (
+    LikeResult,
+    LikeSource,
+    LikeStatus,
+    SubscriptionRecord,
+    UserLikeStats,
+)
 from .store import (
     get_subscription,
     get_user_stats,
@@ -21,10 +27,15 @@ from .store import (
 from .utils import get_random_delay_seconds, in_active_window, is_friend
 
 
-async def check_instant_like_friend(bot: Bot, user_id: int) -> bool:
-    """按配置判断即时点赞是否需要好友关系。"""
+async def check_friend(
+    bot: Bot,
+    user_id: int,
+    *,
+    require_friend: bool,
+) -> bool:
+    """按配置判断是否需要好友关系。"""
 
-    if not plugin_config.sublike_need_friend_me:
+    if not require_friend:
         return True
 
     return await is_friend(bot, user_id)
@@ -46,39 +57,71 @@ def update_user_like_stats(user_id: int, total: int, liked_at: datetime) -> None
     upsert_user_stats(stats)
 
 
-async def send_like_until_limit(bot: Bot, user_id: int) -> LikeResult:
-    """持续点赞，直到接口拒绝继续点赞为止。"""
+def _is_limit_response(response: object) -> bool:
+    """判断接口返回是否表示已到点赞上限。"""
 
-    result = LikeResult(user_id=user_id)
+    if not isinstance(response, dict):
+        return False
+
+    return response.get("ok") is False or response.get("times") == 0
+
+
+def _is_limit_exception(exception: Exception) -> bool:
+    """判断异常是否表示已到点赞上限。"""
+
+    text = repr(exception)
+    limit_markers = (
+        "已达上限",
+        "不能再赞",
+        "点赞失败 今日同一好友点赞数已达上限",
+        "limit",
+    )
+    return any(marker in text for marker in limit_markers)
+
+
+async def execute_like(bot: Bot, user_id: int, *, source: LikeSource) -> LikeResult:
+    """执行点赞请求，直到接口拒绝继续点赞为止。"""
+
+    result = LikeResult(
+        user_id=user_id,
+        source=source,
+        status=LikeStatus.FAILED,
+    )
     like_times = plugin_config.sublike_like_times
 
     while True:
         try:
             response = await bot.send_like(user_id=user_id, times=like_times)
         except Exception as exception:
-            result.hit_limit = True
             if result.total > 0:
                 result.success = True
-                result.message = f"👍 已经点了 {result.total} 个赞"
+                result.status = LikeStatus.SUCCESS
+                result.hit_limit = True
+                result.detail = repr(exception)
                 logger.info(
                     f"用户 {user_id} 点赞已到上限，本次累计 {result.total} 赞："
                     f"{exception!r}"
                 )
+            elif _is_limit_exception(exception):
+                result.status = LikeStatus.LIMIT_REACHED
+                result.hit_limit = True
+                result.detail = repr(exception)
+                logger.info(f"用户 {user_id} 今日点赞已达上限：{exception!r}")
             else:
-                result.message = "🌟 今天赞不了更多了喵~"
+                result.status = LikeStatus.FAILED
+                result.detail = repr(exception)
                 logger.warning(f"用户 {user_id} 点赞失败：{exception!r}")
             break
 
         result.total += like_times
 
-        if isinstance(response, dict):
-            if response.get("ok") is False or response.get("times") == 0:
-                result.hit_limit = True
-                break
+        if _is_limit_response(response):
+            result.hit_limit = True
+            break
 
     if result.total > 0:
         result.success = True
-        result.message = f"👍 已经点了 {result.total} 个赞"
+        result.status = LikeStatus.SUCCESS
 
     return result
 
@@ -89,16 +132,19 @@ async def handle_instant_like(
     *,
     source: LikeSource = LikeSource.INSTANT,
 ) -> LikeResult:
-    """处理即时点赞流程，并在成功后更新累计统计。"""
+    """处理即时点赞流程。"""
 
     result = LikeResult(user_id=user_id, source=source)
-    result.is_friend = await check_instant_like_friend(bot, user_id)
+    result.is_friend = await check_friend(
+        bot,
+        user_id,
+        require_friend=plugin_config.sublike_need_friend_me,
+    )
     if not result.is_friend:
-        result.message = "⚠️ 需要先加好友才能点赞"
+        result.status = LikeStatus.NOT_FRIEND
         return result
 
-    like_result = await send_like_until_limit(bot, user_id)
-    like_result.source = source
+    like_result = await execute_like(bot, user_id, source=source)
     like_result.is_friend = result.is_friend
 
     if like_result.success:
@@ -212,17 +258,25 @@ async def handle_subscription_like(bot: Bot, record: SubscriptionRecord) -> Like
     )
 
     if plugin_config.sublike_need_friend_sub:
-        result.is_friend = await is_friend(bot, record.user_id)
+        result.is_friend = await check_friend(
+            bot,
+            record.user_id,
+            require_friend=plugin_config.sublike_need_friend_sub,
+        )
         if not result.is_friend:
-            result.message = "⚠️ 当前不是机器人好友，跳过订阅点赞"
+            result.status = LikeStatus.NOT_FRIEND
+            result.detail = "当前不是机器人好友，跳过订阅点赞"
             return result
 
     delay_seconds = get_random_delay_seconds(plugin_config.sublike_delay_max)
     if delay_seconds > 0:
         await asyncio.sleep(delay_seconds)
 
-    result = await send_like_until_limit(bot, record.user_id)
-    result.source = LikeSource.SUBSCRIPTION
+    result = await execute_like(
+        bot,
+        record.user_id,
+        source=LikeSource.SUBSCRIPTION,
+    )
     if plugin_config.sublike_need_friend_sub:
         result.is_friend = True
 
@@ -256,4 +310,8 @@ async def run_subscription_scan(bot: Bot) -> None:
     for record in records:
         if record.last_like_date == now.date():
             continue
-        await handle_subscription_like(bot, record)
+        result = await handle_subscription_like(bot, record)
+        if result.status == LikeStatus.NOT_FRIEND:
+            logger.info(f"用户 {record.user_id} 不是好友，跳过订阅点赞")
+        elif result.status == LikeStatus.FAILED:
+            logger.warning(f"用户 {record.user_id} 订阅点赞失败：{result.detail}")

@@ -13,6 +13,16 @@ class LikeSource(str, Enum):
     SUBSCRIPTION = "subscription"
 
 
+class LikeStatus(str, Enum):
+    """点赞结果状态。"""
+
+    SUCCESS = "success"
+    LIMIT_REACHED = "limit_reached"
+    NOT_FRIEND = "not_friend"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
 class SubscriptionRecord(BaseModel):
     """订阅记录。"""
 
@@ -37,9 +47,10 @@ class LikeResult(BaseModel):
     """单次点赞流程结果。"""
 
     user_id: int
+    status: LikeStatus = LikeStatus.FAILED
     total: int = Field(default=0, ge=0)
     source: LikeSource = LikeSource.INSTANT
     is_friend: bool | None = None
     hit_limit: bool = False
     success: bool = False
-    message: str = ""
+    detail: str = ""
