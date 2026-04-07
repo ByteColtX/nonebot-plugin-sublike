@@ -49,7 +49,8 @@ def is_like_other(event: MessageEvent) -> bool:
 
     plain_text = event.get_plaintext().strip()
     return any(
-        plain_text.startswith(keyword) for keyword in plugin_config.sublike_cmd_other
+        plain_text.startswith(keyword)
+        for keyword in plugin_config.sublike_cmd_other
     )
 
 
