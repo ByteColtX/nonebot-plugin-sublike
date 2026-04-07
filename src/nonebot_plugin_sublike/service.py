@@ -4,6 +4,16 @@ from nonebot import logger
 from nonebot.adapters.onebot.v11 import Bot
 
 from .config import plugin_config
+from .utils import is_friend
+
+
+async def check_instant_like_friend(bot: Bot, user_id: int) -> bool:
+    """按配置判断即时点赞是否需要好友关系。"""
+
+    if not plugin_config.sublike_need_friend_me:
+        return True
+
+    return await is_friend(bot, user_id)
 
 
 async def send_like_until_limit(bot: Bot, user_id: int) -> int:

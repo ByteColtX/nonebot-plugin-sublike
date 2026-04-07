@@ -6,13 +6,14 @@ from nonebot import on_message
 from nonebot.adapters.onebot.v11 import (
     Bot,
     GroupMessageEvent,
+    Message,
     MessageEvent,
     MessageSegment,
 )
 from nonebot.rule import Rule
 
 from .config import plugin_config
-from .service import send_like_until_limit
+from .service import check_instant_like_friend, send_like_until_limit
 
 QQ_RE = re.compile(r"\b[1-9]\d{5,11}\b")
 
@@ -47,7 +48,9 @@ def is_like_other(event: MessageEvent) -> bool:
         return False
 
     plain_text = event.get_plaintext().strip()
-    return any(plain_text.startswith(keyword) for keyword in plugin_config.sublike_cmd_other)
+    return any(
+        plain_text.startswith(keyword) for keyword in plugin_config.sublike_cmd_other
+    )
 
 
 def extract_target_user_id(event: GroupMessageEvent) -> int | None:
@@ -76,6 +79,9 @@ like_other = on_message(rule=Rule(is_like_other), priority=5, block=True)
 async def handle_like_me(bot: Bot, event: MessageEvent):
     """处理“赞我”命令。"""
 
+    if not await check_instant_like_friend(bot, event.user_id):
+        await like_me.finish("⚠️ 需要先加好友才能点赞")
+
     total = await send_like_until_limit(bot, event.user_id)
 
     if total > 0:
@@ -92,19 +98,33 @@ async def handle_like_other(bot: Bot, event: GroupMessageEvent):
     if target_user_id is None:
         await like_other.finish("🤡 请提供有效的 QQ 号或 @目标用户")
 
-    total = await send_like_until_limit(bot, target_user_id)
-
-    if total > 0:
-        reply = (
-            MessageSegment.text("👍 已经给 ")
-            + MessageSegment.at(target_user_id)
-            + MessageSegment.text(f" 点了 {total} 个赞")
+    if not await check_instant_like_friend(bot, target_user_id):
+        reply = Message(
+            [
+                MessageSegment.text("⚠️ 请先让 "),
+                MessageSegment.at(target_user_id),
+                MessageSegment.text(" 添加机器人为好友后再点赞"),
+            ]
         )
         await like_other.finish(reply)
 
-    reply = (
-        MessageSegment.text("🌟 今天赞不了 ")
-        + MessageSegment.at(target_user_id)
-        + MessageSegment.text(" 更多了喵~")
+    total = await send_like_until_limit(bot, target_user_id)
+
+    if total > 0:
+        reply = Message(
+            [
+                MessageSegment.text("👍 已经给 "),
+                MessageSegment.at(target_user_id),
+                MessageSegment.text(f" 点了 {total} 个赞"),
+            ]
+        )
+        await like_other.finish(reply)
+
+    reply = Message(
+        [
+            MessageSegment.text("🌟 今天赞不了 "),
+            MessageSegment.at(target_user_id),
+            MessageSegment.text(" 更多了喵~"),
+        ]
     )
     await like_other.finish(reply)
