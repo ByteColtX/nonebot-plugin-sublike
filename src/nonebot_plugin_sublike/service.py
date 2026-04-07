@@ -3,8 +3,7 @@
 import asyncio
 from datetime import datetime, timedelta
 
-from nonebot import get_driver
-from nonebot import logger
+from nonebot import get_driver, logger
 from nonebot.adapters.onebot.v11 import Bot
 
 from .config import plugin_config

@@ -11,7 +11,16 @@ class Config(BaseModel):
     sublike_cmd_sub: tuple[str, ...] = ("订阅赞", "天天赞我")
     sublike_cmd_unsub: tuple[str, ...] = ("取消订阅赞", "订阅赞取消")
     sublike_cmd_status: tuple[str, ...] = ("订阅赞查看", "订阅赞状态", "查看订阅赞")
-    sublike_cmd_other: tuple[str, ...] = ("赞ta", "赞TA", "赞他", "赞她", "草ta", "草TA", "草他", "草她")
+    sublike_cmd_other: tuple[str, ...] = (
+        "赞ta",
+        "赞TA",
+        "赞他",
+        "赞她",
+        "草ta",
+        "草TA",
+        "草他",
+        "草她",
+    )
 
     sublike_like_times: int = Field(default=10, ge=1, le=10)
     sublike_need_friend_me: bool = False

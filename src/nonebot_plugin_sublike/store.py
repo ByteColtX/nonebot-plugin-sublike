@@ -105,9 +105,7 @@ def get_subscription(user_id: int) -> SubscriptionRecord | None:
 def upsert_subscription(record: SubscriptionRecord) -> None:
     """新增或更新订阅记录。"""
 
-    records = [
-        item for item in load_subscriptions() if item.user_id != record.user_id
-    ]
+    records = [item for item in load_subscriptions() if item.user_id != record.user_id]
     records.append(record)
     save_subscriptions(records)
 
@@ -161,8 +159,6 @@ def get_user_stats(user_id: int) -> UserLikeStats | None:
 def upsert_user_stats(record: UserLikeStats) -> None:
     """新增或更新用户统计。"""
 
-    records = [
-        item for item in load_user_stats() if item.user_id != record.user_id
-    ]
+    records = [item for item in load_user_stats() if item.user_id != record.user_id]
     records.append(record)
     save_user_stats(records)
