@@ -1,7 +1,12 @@
+from nonebot import require
 from nonebot.plugin import PluginMetadata
+
+require("nonebot_plugin_apscheduler")
+require("nonebot_plugin_localstore")
 
 from .config import Config
 from .matcher import like_me
+from .scheduler import subscription_scan_job
 
 __plugin_meta__ = PluginMetadata(
     name="QQ点赞",
@@ -14,4 +19,4 @@ __plugin_meta__ = PluginMetadata(
     extra={"author": "ByteColtX <umk@live.com>"},
 )
 
-__all__ = ["__plugin_meta__", "like_me"]
+__all__ = ["__plugin_meta__", "like_me", "subscription_scan_job"]

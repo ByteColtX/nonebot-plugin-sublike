@@ -1,5 +1,6 @@
 """点赞业务逻辑。"""
 
+import asyncio
 from datetime import datetime, timedelta
 
 from nonebot import get_driver
@@ -17,7 +18,7 @@ from .store import (
     upsert_subscription,
     upsert_user_stats,
 )
-from .utils import is_friend
+from .utils import get_random_delay_seconds, in_active_window, is_friend
 
 
 async def check_instant_like_friend(bot: Bot, user_id: int) -> bool:
@@ -200,3 +201,59 @@ def is_superuser(user_id: int) -> bool:
     """判断当前用户是否为超级用户。"""
 
     return str(user_id) in _get_superusers()
+
+
+async def handle_subscription_like(bot: Bot, record: SubscriptionRecord) -> LikeResult:
+    """执行单个订阅用户的定时点赞。"""
+
+    result = LikeResult(
+        user_id=record.user_id,
+        source=LikeSource.SUBSCRIPTION,
+    )
+
+    if plugin_config.sublike_need_friend_sub:
+        result.is_friend = await is_friend(bot, record.user_id)
+        if not result.is_friend:
+            result.message = "⚠️ 当前不是机器人好友，跳过订阅点赞"
+            return result
+
+    delay_seconds = get_random_delay_seconds(plugin_config.sublike_delay_max)
+    if delay_seconds > 0:
+        await asyncio.sleep(delay_seconds)
+
+    result = await send_like_until_limit(bot, record.user_id)
+    result.source = LikeSource.SUBSCRIPTION
+    if plugin_config.sublike_need_friend_sub:
+        result.is_friend = True
+
+    if result.success:
+        now = datetime.now()
+        update_user_like_stats(record.user_id, result.total, now)
+        updated_record = record.model_copy(
+            update={
+                "last_like_at": now,
+                "last_like_date": now.date(),
+            }
+        )
+        upsert_subscription(updated_record)
+
+    return result
+
+
+async def run_subscription_scan(bot: Bot) -> None:
+    """执行一次订阅扫描。"""
+
+    now = datetime.now()
+    if not in_active_window(
+        now,
+        plugin_config.sublike_sched_start,
+        plugin_config.sublike_sched_end,
+    ):
+        return
+
+    purge_expired_subscriptions(now)
+    records = load_subscriptions()
+    for record in records:
+        if record.last_like_date == now.date():
+            continue
+        await handle_subscription_like(bot, record)
