@@ -14,7 +14,13 @@ from nonebot.rule import Rule
 
 from .config import plugin_config
 from .models import LikeSource
-from .service import handle_instant_like
+from .service import (
+    handle_instant_like,
+    handle_subscribe,
+    handle_subscription_status,
+    handle_unsubscribe,
+    is_superuser,
+)
 
 QQ_RE = re.compile(r"\b[1-9]\d{5,11}\b")
 
@@ -55,6 +61,36 @@ def is_like_other(event: MessageEvent) -> bool:
     )
 
 
+def is_subscribe(event: MessageEvent) -> bool:
+    """判断消息是否为订阅命令。"""
+
+    if _is_banned_group(event):
+        return False
+
+    plain_text = event.get_plaintext().strip()
+    return plain_text in plugin_config.sublike_cmd_sub
+
+
+def is_unsubscribe(event: MessageEvent) -> bool:
+    """判断消息是否为取消订阅命令。"""
+
+    if _is_banned_group(event):
+        return False
+
+    plain_text = event.get_plaintext().strip()
+    return plain_text in plugin_config.sublike_cmd_unsub
+
+
+def is_subscription_status(event: MessageEvent) -> bool:
+    """判断消息是否为订阅状态查询命令。"""
+
+    if _is_banned_group(event):
+        return False
+
+    plain_text = event.get_plaintext().strip()
+    return plain_text in plugin_config.sublike_cmd_status
+
+
 def extract_target_user_id(event: GroupMessageEvent) -> int | None:
     """从群消息中提取被点赞的目标 QQ 号。"""
 
@@ -75,6 +111,13 @@ def extract_target_user_id(event: GroupMessageEvent) -> int | None:
 
 like_me = on_message(rule=Rule(is_like_me), priority=5, block=True)
 like_other = on_message(rule=Rule(is_like_other), priority=5, block=True)
+like_subscribe = on_message(rule=Rule(is_subscribe), priority=5, block=True)
+like_unsubscribe = on_message(rule=Rule(is_unsubscribe), priority=5, block=True)
+like_status = on_message(
+    rule=Rule(is_subscription_status),
+    priority=5,
+    block=True,
+)
 
 
 @like_me.handle()
@@ -126,3 +169,30 @@ async def handle_like_other(bot: Bot, event: GroupMessageEvent):
         ]
     )
     await like_other.finish(reply)
+
+
+@like_subscribe.handle()
+async def handle_like_subscribe(bot: Bot, event: MessageEvent):
+    """处理订阅命令。"""
+
+    message = await handle_subscribe(bot, event.user_id)
+    await like_subscribe.finish(message)
+
+
+@like_unsubscribe.handle()
+async def handle_like_unsubscribe(event: MessageEvent):
+    """处理取消订阅命令。"""
+
+    message = handle_unsubscribe(event.user_id)
+    await like_unsubscribe.finish(message)
+
+
+@like_status.handle()
+async def handle_like_status(event: MessageEvent):
+    """处理订阅状态查询命令。"""
+
+    message = handle_subscription_status(
+        event.user_id,
+        is_superuser(event.user_id),
+    )
+    await like_status.finish(message)

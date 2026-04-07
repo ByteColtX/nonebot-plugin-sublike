@@ -1,13 +1,22 @@
 """点赞业务逻辑。"""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from nonebot import get_driver
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import Bot
 
 from .config import plugin_config
-from .models import LikeResult, LikeSource, UserLikeStats
-from .store import get_user_stats, upsert_user_stats
+from .models import LikeResult, LikeSource, SubscriptionRecord, UserLikeStats
+from .store import (
+    get_subscription,
+    get_user_stats,
+    load_subscriptions,
+    purge_expired_subscriptions,
+    remove_subscription,
+    upsert_subscription,
+    upsert_user_stats,
+)
 from .utils import is_friend
 
 
@@ -95,3 +104,99 @@ async def handle_instant_like(
         update_user_like_stats(user_id, like_result.total, datetime.now())
 
     return like_result
+
+
+def _get_superusers() -> set[str]:
+    """获取超级用户列表。"""
+
+    return set(get_driver().config.superusers)
+
+
+async def handle_subscribe(bot: Bot, user_id: int) -> str:
+    """创建或续期订阅。"""
+
+    now = datetime.now()
+    purge_expired_subscriptions(now)
+
+    current = get_subscription(user_id)
+    expires_at = now + timedelta(days=plugin_config.sublike_sub_expire_days)
+    is_renew = current is not None and current.expires_at > now
+
+    if current is None or current.expires_at <= now:
+        record = SubscriptionRecord(
+            user_id=user_id,
+            created_at=now,
+            last_trigger_at=now,
+            expires_at=expires_at,
+        )
+    else:
+        record = current.model_copy(
+            update={
+                "last_trigger_at": now,
+                "expires_at": expires_at,
+            }
+        )
+
+    upsert_subscription(record)
+
+    if plugin_config.sublike_need_friend_sub and not await is_friend(bot, user_id):
+        if is_renew:
+            return (
+                "🔁 订阅赞已续期，但当前你还不是机器人好友，"
+                "定时点赞可能不会生效"
+            )
+        return "👍 订阅赞成功，但当前你还不是机器人好友，定时点赞可能不会生效"
+
+    if is_renew:
+        return "🔁 订阅赞已续期"
+    return "👍 订阅赞成功"
+
+
+def handle_unsubscribe(user_id: int) -> str:
+    """取消订阅。"""
+
+    removed = remove_subscription(user_id)
+    if removed:
+        return "👎 已取消订阅赞"
+    return "💢 你当前没有订阅赞"
+
+
+def handle_subscription_status(user_id: int, is_superuser: bool) -> str:
+    """查看订阅状态。"""
+
+    now = datetime.now()
+    purge_expired_subscriptions(now)
+
+    if is_superuser:
+        records = load_subscriptions()
+        if not records:
+            return "📭 当前没有有效订阅"
+
+        lines = ["📋 当前有效订阅："]
+        for record in records:
+            lines.append(
+                f"{record.user_id} 到期于 {record.expires_at:%Y-%m-%d %H:%M:%S}"
+            )
+        return "\n".join(lines)
+
+    record = get_subscription(user_id)
+    if record is None or record.expires_at <= now:
+        return "📭 你当前没有有效订阅"
+
+    lines = [
+        "📌 你的订阅状态：",
+        f"QQ：{record.user_id}",
+        f"到期时间：{record.expires_at:%Y-%m-%d %H:%M:%S}",
+    ]
+    if record.last_like_at is not None:
+        lines.append(f"最近点赞：{record.last_like_at:%Y-%m-%d %H:%M:%S}")
+    else:
+        lines.append("最近点赞：暂无")
+
+    return "\n".join(lines)
+
+
+def is_superuser(user_id: int) -> bool:
+    """判断当前用户是否为超级用户。"""
+
+    return str(user_id) in _get_superusers()
