@@ -1,45 +1,17 @@
-from nonebot import logger, require
-from nonebot.plugin import PluginMetadata, inherit_supported_adapters
+from nonebot.plugin import PluginMetadata
 
-require("nonebot_plugin_uninfo")
-require("nonebot_plugin_alconna")
-require("nonebot_plugin_localstore")
-require("nonebot_plugin_apscheduler")
 from .config import Config
+from .matcher import like_me
 
 __plugin_meta__ = PluginMetadata(
-    name="名称",
-    description="描述",
-    usage="用法",
-    type="application",  # library
+    name="QQ点赞",
+    description="QQ点赞、订阅赞",
+    usage="赞我|赞他|订阅赞|取消订阅赞|订阅列表查询",
+    type="application",
     homepage="https://github.com/ByteColtX/nonebot-plugin-sublike",
     config=Config,
-    supported_adapters=inherit_supported_adapters(
-        "nonebot_plugin_alconna", "nonebot_plugin_uninfo"
-    ),
-    # supported_adapters={"~onebot.v11"}, # 仅 onebot
-    extra={"author": "ByteColtX <your@mail.com>"},
+    supported_adapters={"~onebot.v11"},
+    extra={"author": "ByteColtX <umk@live.com>"},
 )
 
-from arclet.alconna import Args, Option, Alconna, Arparma, Subcommand
-from nonebot_plugin_alconna import on_alconna
-from nonebot_plugin_alconna.uniseg import UniMessage
-
-pip = on_alconna(
-    Alconna(
-        "pip",
-        Subcommand(
-            "install",
-            Args["package", str],
-            Option("-r|--requirement", Args["file", str]),
-            Option("-i|--index-url", Args["url", str]),
-        ),
-    )
-)
-
-
-@pip.handle()
-async def _(result: Arparma):
-    package: str = result.other_args["package"]
-    logger.info(f"installing {package}")
-    await UniMessage.text(package).send()
+__all__ = ["__plugin_meta__", "like_me"]
