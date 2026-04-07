@@ -13,7 +13,13 @@ from nonebot.adapters.onebot.v11 import (
 from nonebot.rule import Rule
 
 from .config import plugin_config
-from .models import LikeResult, LikeSource, LikeStatus
+from .models import (
+    LikeResult,
+    LikeSource,
+    LikeStatus,
+    SubscriptionResult,
+    SubscriptionStatus,
+)
 from .service import (
     handle_instant_like,
     handle_subscribe,
@@ -157,6 +163,61 @@ def build_like_other_message(
     return "💥 点赞失败了喵~"
 
 
+def build_subscribe_message(result: SubscriptionResult) -> str:
+    """生成订阅命令回复文案。"""
+
+    if result.status == SubscriptionStatus.RENEWED:
+        if result.require_friend and result.is_friend is False:
+            return "🔁 订阅赞已续期，但当前你还不是机器人好友，定时点赞可能不会生效"
+        return "🔁 订阅赞已续期"
+
+    if result.status == SubscriptionStatus.SUBSCRIBED:
+        if result.require_friend and result.is_friend is False:
+            return "👍 订阅赞成功，但当前你还不是机器人好友，定时点赞可能不会生效"
+        return "👍 订阅赞成功"
+
+    return "💥 订阅处理失败"
+
+
+def build_unsubscribe_message(result: SubscriptionResult) -> str:
+    """生成取消订阅回复文案。"""
+
+    if result.status == SubscriptionStatus.UNSUBSCRIBED:
+        return "👎 已取消订阅赞"
+    return "💢 你当前没有订阅赞"
+
+
+def build_status_message(result: SubscriptionResult) -> str:
+    """生成订阅状态回复文案。"""
+
+    if result.status == SubscriptionStatus.EMPTY:
+        if result.is_superuser_view:
+            return "📭 当前没有有效订阅"
+        return "📭 你当前没有有效订阅"
+
+    if result.status == SubscriptionStatus.STATUS_LIST:
+        lines = ["📋 当前有效订阅："]
+        for record in result.records:
+            lines.append(
+                f"{record.user_id} 到期于 {record.expires_at:%Y-%m-%d %H:%M:%S}"
+            )
+        return "\n".join(lines)
+
+    if result.status == SubscriptionStatus.STATUS_SINGLE and result.record is not None:
+        lines = [
+            "📌 你的订阅状态：",
+            f"QQ：{result.record.user_id}",
+            f"到期时间：{result.record.expires_at:%Y-%m-%d %H:%M:%S}",
+        ]
+        if result.record.last_like_at is not None:
+            lines.append(f"最近点赞：{result.record.last_like_at:%Y-%m-%d %H:%M:%S}")
+        else:
+            lines.append("最近点赞：暂无")
+        return "\n".join(lines)
+
+    return "💥 查询订阅状态失败"
+
+
 like_me = on_message(rule=Rule(is_like_me), priority=5, block=True)
 like_other = on_message(rule=Rule(is_like_other), priority=5, block=True)
 like_subscribe = on_message(rule=Rule(is_subscribe), priority=5, block=True)
@@ -197,24 +258,24 @@ async def handle_like_other(bot: Bot, event: GroupMessageEvent):
 async def handle_like_subscribe(bot: Bot, event: MessageEvent):
     """处理订阅命令。"""
 
-    message = await handle_subscribe(bot, event.user_id)
-    await like_subscribe.finish(message)
+    result = await handle_subscribe(bot, event.user_id)
+    await like_subscribe.finish(build_subscribe_message(result))
 
 
 @like_unsubscribe.handle()
 async def handle_like_unsubscribe(event: MessageEvent):
     """处理取消订阅命令。"""
 
-    message = handle_unsubscribe(event.user_id)
-    await like_unsubscribe.finish(message)
+    result = handle_unsubscribe(event.user_id)
+    await like_unsubscribe.finish(build_unsubscribe_message(result))
 
 
 @like_status.handle()
 async def handle_like_status(event: MessageEvent):
     """处理订阅状态查询命令。"""
 
-    message = handle_subscription_status(
+    result = handle_subscription_status(
         event.user_id,
         is_superuser(event.user_id),
     )
-    await like_status.finish(message)
+    await like_status.finish(build_status_message(result))

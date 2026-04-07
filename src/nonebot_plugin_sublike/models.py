@@ -23,6 +23,18 @@ class LikeStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+class SubscriptionStatus(str, Enum):
+    """订阅操作状态。"""
+
+    SUBSCRIBED = "subscribed"
+    RENEWED = "renewed"
+    UNSUBSCRIBED = "unsubscribed"
+    NOT_SUBSCRIBED = "not_subscribed"
+    STATUS_SINGLE = "status_single"
+    STATUS_LIST = "status_list"
+    EMPTY = "empty"
+
+
 class SubscriptionRecord(BaseModel):
     """订阅记录。"""
 
@@ -54,3 +66,15 @@ class LikeResult(BaseModel):
     hit_limit: bool = False
     success: bool = False
     detail: str = ""
+
+
+class SubscriptionResult(BaseModel):
+    """订阅操作结果。"""
+
+    user_id: int
+    status: SubscriptionStatus
+    is_superuser_view: bool = False
+    require_friend: bool = False
+    is_friend: bool | None = None
+    record: SubscriptionRecord | None = None
+    records: list[SubscriptionRecord] = Field(default_factory=list)
