@@ -13,7 +13,8 @@ from nonebot.adapters.onebot.v11 import (
 from nonebot.rule import Rule
 
 from .config import plugin_config
-from .service import check_instant_like_friend, send_like_until_limit
+from .models import LikeSource
+from .service import handle_instant_like
 
 QQ_RE = re.compile(r"\b[1-9]\d{5,11}\b")
 
@@ -80,15 +81,8 @@ like_other = on_message(rule=Rule(is_like_other), priority=5, block=True)
 async def handle_like_me(bot: Bot, event: MessageEvent):
     """处理“赞我”命令。"""
 
-    if not await check_instant_like_friend(bot, event.user_id):
-        await like_me.finish("⚠️ 需要先加好友才能点赞")
-
-    total = await send_like_until_limit(bot, event.user_id)
-
-    if total > 0:
-        await like_me.finish(f"👍 已经给你点了 {total} 个赞")
-
-    await like_me.finish("🌟 今天赞不了你更多了喵~")
+    result = await handle_instant_like(bot, event.user_id)
+    await like_me.finish(result.message)
 
 
 @like_other.handle()
@@ -99,7 +93,12 @@ async def handle_like_other(bot: Bot, event: GroupMessageEvent):
     if target_user_id is None:
         await like_other.finish("🤡 请提供有效的 QQ 号或 @目标用户")
 
-    if not await check_instant_like_friend(bot, target_user_id):
+    result = await handle_instant_like(
+        bot,
+        target_user_id,
+        source=LikeSource.INSTANT,
+    )
+    if not result.is_friend:
         reply = Message(
             [
                 MessageSegment.text("⚠️ 请先让 "),
@@ -109,14 +108,12 @@ async def handle_like_other(bot: Bot, event: GroupMessageEvent):
         )
         await like_other.finish(reply)
 
-    total = await send_like_until_limit(bot, target_user_id)
-
-    if total > 0:
+    if result.success:
         reply = Message(
             [
                 MessageSegment.text("👍 已经给 "),
                 MessageSegment.at(target_user_id),
-                MessageSegment.text(f" 点了 {total} 个赞"),
+                MessageSegment.text(f" 点了 {result.total} 个赞"),
             ]
         )
         await like_other.finish(reply)
