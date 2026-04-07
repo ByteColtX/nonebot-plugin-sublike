@@ -3,15 +3,18 @@
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import Bot
 
+from .config import plugin_config
+
 
 async def send_like_until_limit(bot: Bot, user_id: int) -> int:
     """持续点赞，直到接口拒绝继续点赞为止。"""
 
     total = 0
+    like_times = plugin_config.sublike_like_times
 
     while True:
         try:
-            result = await bot.send_like(user_id=user_id, times=10)
+            result = await bot.send_like(user_id=user_id, times=like_times)
         except Exception as exception:
             if total > 0:
                 logger.info(
@@ -22,8 +25,8 @@ async def send_like_until_limit(bot: Bot, user_id: int) -> int:
                 logger.warning(f"用户 {user_id} 点赞失败：{exception!r}")
             break
 
-        # OneBot v11 单次最多 10 赞，持续累加直到接口拒绝。
-        total += 10
+        # OneBot v11 单次最多 10 赞，这里按配置值持续累加直到接口拒绝。
+        total += like_times
 
         if isinstance(result, dict):
             if result.get("ok") is False:
