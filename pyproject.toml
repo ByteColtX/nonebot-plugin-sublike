@@ -20,6 +20,8 @@ Repository = "https://github.com/ByteColtX/nonebot-plugin-sublike.git"
 [dependency-groups]
 dev = [
   "bump-my-version>=1.2.7",
+  "pytest>=8.4.2,<9.0.0",
+  "pytest-asyncio>=1.2.0,<2.0.0",
   "ruff>=0.15.2,<1.0.0",
 ]
 
