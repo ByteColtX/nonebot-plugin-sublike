@@ -88,11 +88,9 @@ async def execute_like(bot: Bot, user_id: int, *, source: LikeSource) -> LikeRes
         source=source,
         status=LikeStatus.FAILED,
     )
-    like_times = plugin_config.sublike_like_times
-
     while True:
         try:
-            response = await bot.send_like(user_id=user_id, times=like_times)
+            response = await bot.send_like(user_id=user_id, times=10)
         except Exception as exception:
             if result.total > 0:
                 result.success = True
@@ -114,7 +112,7 @@ async def execute_like(bot: Bot, user_id: int, *, source: LikeSource) -> LikeRes
                 logger.warning(f"用户 {user_id} 点赞失败：{exception!r}")
             break
 
-        result.total += like_times
+        result.total += 10
 
         if _is_limit_response(response):
             result.hit_limit = True

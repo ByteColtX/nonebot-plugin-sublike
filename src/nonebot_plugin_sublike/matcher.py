@@ -197,19 +197,17 @@ def build_status_message(result: SubscriptionResult) -> str:
     if result.status == SubscriptionStatus.STATUS_LIST:
         lines = ["📋 当前有效订阅："]
         for record in result.records:
-            lines.append(
-                f"{record.user_id} 到期于 {record.expires_at:%Y-%m-%d %H:%M:%S}"
-            )
+            lines.append(f"{record.user_id} 到期于 {record.expires_at:%Y-%m-%d}")
         return "\n".join(lines)
 
     if result.status == SubscriptionStatus.STATUS_SINGLE and result.record is not None:
         lines = [
             "📌 你的订阅状态：",
             f"QQ：{result.record.user_id}",
-            f"到期时间：{result.record.expires_at:%Y-%m-%d %H:%M:%S}",
+            f"到期时间：{result.record.expires_at:%Y-%m-%d}",
         ]
         if result.record.last_like_at is not None:
-            lines.append(f"最近点赞：{result.record.last_like_at:%Y-%m-%d %H:%M:%S}")
+            lines.append(f"最近点赞：{result.record.last_like_at:%Y-%m-%d}")
         else:
             lines.append("最近点赞：暂无")
         return "\n".join(lines)
