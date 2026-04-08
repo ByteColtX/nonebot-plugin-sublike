@@ -190,6 +190,17 @@ async def handle_subscribe(bot: Bot, user_id: int) -> SubscriptionResult:
     if require_friend:
         friend_state = await is_friend(bot, user_id)
 
+    like_result = await handle_subscription_like(
+        bot,
+        record,
+        skip_delay=True,
+        friend_state=friend_state,
+    )
+    if like_result.success:
+        record = get_subscription(user_id) or record
+    elif like_result.status == LikeStatus.FAILED:
+        logger.warning(f"用户 {user_id} 订阅后立即点赞失败：{like_result.detail}")
+
     return SubscriptionResult(
         user_id=user_id,
         status=(
@@ -262,6 +273,17 @@ def is_superuser(user_id: int) -> bool:
 
 async def handle_subscription_like(bot: Bot, record: SubscriptionRecord) -> LikeResult:
     """执行单个订阅用户的定时点赞。"""
+    return await _handle_subscription_like(bot, record)
+
+
+async def _handle_subscription_like(
+    bot: Bot,
+    record: SubscriptionRecord,
+    *,
+    skip_delay: bool = False,
+    friend_state: bool | None = None,
+) -> LikeResult:
+    """执行单个订阅用户的点赞。"""
 
     result = LikeResult(
         user_id=record.user_id,
@@ -269,17 +291,22 @@ async def handle_subscription_like(bot: Bot, record: SubscriptionRecord) -> Like
     )
 
     if plugin_config.sublike_need_friend_sub:
-        result.is_friend = await check_friend(
-            bot,
-            record.user_id,
-            require_friend=plugin_config.sublike_need_friend_sub,
-        )
+        if friend_state is None:
+            result.is_friend = await check_friend(
+                bot,
+                record.user_id,
+                require_friend=plugin_config.sublike_need_friend_sub,
+            )
+        else:
+            result.is_friend = friend_state
         if not result.is_friend:
             result.status = LikeStatus.NOT_FRIEND
             result.detail = "当前不是机器人好友，跳过订阅点赞"
             return result
 
-    delay_seconds = get_random_delay_seconds(plugin_config.sublike_delay_max)
+    delay_seconds = (
+        0 if skip_delay else get_random_delay_seconds(plugin_config.sublike_delay_max)
+    )
     if delay_seconds > 0:
         await asyncio.sleep(delay_seconds)
 
