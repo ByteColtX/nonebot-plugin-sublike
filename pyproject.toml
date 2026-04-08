@@ -45,6 +45,9 @@ replace = "name = \"nonebot-plugin-sublike\"\nversion = \"{new_version}\""
 [tool.nonebot]
 plugins = ["nonebot_plugin_sublike"]
 
+[tool.basedpyright]
+failOnWarnings = false
+
 [tool.ruff]
 line-length = 88
 

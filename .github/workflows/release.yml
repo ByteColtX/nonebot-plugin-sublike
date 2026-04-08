@@ -40,6 +40,15 @@ jobs:
           uv build
           uv publish
 
+      - name: Create GitHub Release
+        run: |
+          gh release create ${{ steps.version.outputs.TAG_NAME }} \
+            --verify-tag \
+            --title ${{ steps.version.outputs.TAG_NAME }} \
+            --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload Release Asset
         run: gh release upload --clobber ${{ steps.version.outputs.TAG_NAME }} dist/*.tar.gz dist/*.whl
         env:
