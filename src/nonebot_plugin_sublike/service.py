@@ -271,12 +271,7 @@ def is_superuser(user_id: int) -> bool:
     return str(user_id) in _get_superusers()
 
 
-async def handle_subscription_like(bot: Bot, record: SubscriptionRecord) -> LikeResult:
-    """执行单个订阅用户的定时点赞。"""
-    return await _handle_subscription_like(bot, record)
-
-
-async def _handle_subscription_like(
+async def handle_subscription_like(
     bot: Bot,
     record: SubscriptionRecord,
     *,

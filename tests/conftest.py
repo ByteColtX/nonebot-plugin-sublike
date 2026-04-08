@@ -20,7 +20,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]):
 
 
 @pytest.fixture(scope="session", autouse=True)
-async def after_nonebot_init(after_nonebot_init: None):
+def init_nonebot():
     # 加载适配器
     driver = nonebot.get_driver()
     driver.register_adapter(OnebotV11Adapter)

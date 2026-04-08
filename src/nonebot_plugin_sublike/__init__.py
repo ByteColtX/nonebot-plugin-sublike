@@ -1,8 +1,8 @@
 from nonebot import require
 from nonebot.plugin import PluginMetadata
 
-require("nonebot_plugin_apscheduler")
-require("nonebot_plugin_localstore")
+_ = require("nonebot_plugin_apscheduler")
+_ = require("nonebot_plugin_localstore")
 
 from .config import Config
 from .matcher import like_me
