@@ -28,7 +28,6 @@ class _FakeScheduler:
 
 cast(Any, fake_scheduler).scheduler = _FakeScheduler()
 sys.modules["nonebot_plugin_apscheduler"] = fake_scheduler
-sys.path.insert(0, str(Path(__file__).parent))
 
 from nonebot_plugin_sublike import matcher, service
 from nonebot_plugin_sublike.config import plugin_config
@@ -37,10 +36,10 @@ from nonebot_plugin_sublike.models import (
     LikeSource,
     LikeStatus,
     SubscriptionRecord,
-    SubscriptionStatus,
     SubscriptionResult,
+    SubscriptionStatus,
 )
-from fake import fake_group_message_event_v11
+from tests.fake import fake_group_message_event_v11
 
 
 class FixedDateTime(datetime):
@@ -243,9 +242,7 @@ def test_build_like_me_message_uses_daily_like_copy():
         == "🌟 今天点满了，明天再来"
     )
     assert (
-        matcher.build_like_me_message(
-            LikeResult(user_id=1, status=LikeStatus.FAILED)
-        )
+        matcher.build_like_me_message(LikeResult(user_id=1, status=LikeStatus.FAILED))
         == "💥 手滑了，没赞上"
     )
 
@@ -436,22 +433,19 @@ def test_build_daily_like_messages(fixed_now: datetime):
         expires_at=fixed_now + timedelta(days=7),
         last_like_at=fixed_now - timedelta(days=1),
     )
-    assert (
-        matcher.build_status_message(
-            SubscriptionResult(
-                user_id=582933105,
-                status=SubscriptionStatus.STATUS_SINGLE,
-                record=single_record,
-            )
+    assert matcher.build_status_message(
+        SubscriptionResult(
+            user_id=582933105,
+            status=SubscriptionStatus.STATUS_SINGLE,
+            record=single_record,
         )
-        == "\n".join(
-            [
-                "📌 你的每日赞情况：",
-                "QQ：582933105",
-                "到期：2026-04-15",
-                "上次点赞：2026-04-07",
-            ]
-        )
+    ) == "\n".join(
+        [
+            "📌 你的每日赞情况：",
+            "QQ：582933105",
+            "到期：2026-04-15",
+            "上次点赞：2026-04-07",
+        ]
     )
 
     no_like_record = SubscriptionRecord(
@@ -460,22 +454,19 @@ def test_build_daily_like_messages(fixed_now: datetime):
         last_trigger_at=fixed_now,
         expires_at=fixed_now + timedelta(days=7),
     )
-    assert (
-        matcher.build_status_message(
-            SubscriptionResult(
-                user_id=582933105,
-                status=SubscriptionStatus.STATUS_SINGLE,
-                record=no_like_record,
-            )
+    assert matcher.build_status_message(
+        SubscriptionResult(
+            user_id=582933105,
+            status=SubscriptionStatus.STATUS_SINGLE,
+            record=no_like_record,
         )
-        == "\n".join(
-            [
-                "📌 你的每日赞情况：",
-                "QQ：582933105",
-                "到期：2026-04-15",
-                "上次点赞：还没有",
-            ]
-        )
+    ) == "\n".join(
+        [
+            "📌 你的每日赞情况：",
+            "QQ：582933105",
+            "到期：2026-04-15",
+            "上次点赞：还没有",
+        ]
     )
 
     assert (
