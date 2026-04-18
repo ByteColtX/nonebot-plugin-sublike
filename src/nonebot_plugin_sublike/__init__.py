@@ -10,8 +10,8 @@ from .scheduler import subscription_scan_job
 
 __plugin_meta__ = PluginMetadata(
     name="QQ点赞",
-    description="QQ点赞、订阅赞",
-    usage="赞我|赞他|订阅赞|取消订阅赞|订阅列表查询",
+    description="QQ点赞、每日赞",
+    usage="赞我|赞他|每日赞|取消每日赞|每日赞查询",
     type="application",
     homepage="https://github.com/ByteColtX/nonebot-plugin-sublike",
     config=Config,

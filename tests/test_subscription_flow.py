@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import nonebot
 import pytest
-from nonebot.adapters.onebot.v11 import Bot
+from nonebot.adapters.onebot.v11 import Bot, Message
 
 nonebot.init(driver="~none")
 nonebot.require = lambda name: ModuleType(name)
@@ -28,15 +28,19 @@ class _FakeScheduler:
 
 cast(Any, fake_scheduler).scheduler = _FakeScheduler()
 sys.modules["nonebot_plugin_apscheduler"] = fake_scheduler
+sys.path.insert(0, str(Path(__file__).parent))
 
-from nonebot_plugin_sublike import service
+from nonebot_plugin_sublike import matcher, service
+from nonebot_plugin_sublike.config import plugin_config
 from nonebot_plugin_sublike.models import (
     LikeResult,
     LikeSource,
     LikeStatus,
     SubscriptionRecord,
     SubscriptionStatus,
+    SubscriptionResult,
 )
+from fake import fake_group_message_event_v11
 
 
 class FixedDateTime(datetime):
@@ -205,3 +209,281 @@ def test_handle_subscription_status_for_user_and_superuser(
     assert superuser_result.status == SubscriptionStatus.STATUS_LIST
     assert superuser_result.is_superuser_view is True
     assert [record.user_id for record in superuser_result.records] == [582933105]
+
+
+def test_default_daily_like_commands():
+    assert plugin_config.sublike_cmd_sub == ("每日赞", "天天赞我")
+    assert plugin_config.sublike_cmd_unsub == ("取消每日赞", "每日赞取消")
+    assert plugin_config.sublike_cmd_status == (
+        "每日赞查看",
+        "查看每日赞",
+        "每日赞状态",
+        "每日赞查询",
+        "查询每日赞",
+    )
+
+
+def test_build_like_me_message_uses_daily_like_copy():
+    assert (
+        matcher.build_like_me_message(
+            LikeResult(user_id=1, status=LikeStatus.NOT_FRIEND)
+        )
+        == "🙄 不加好友不赞"
+    )
+    assert (
+        matcher.build_like_me_message(
+            LikeResult(user_id=1, status=LikeStatus.SUCCESS, total=20)
+        )
+        == "👍 给你点了 20 个赞"
+    )
+    assert (
+        matcher.build_like_me_message(
+            LikeResult(user_id=1, status=LikeStatus.LIMIT_REACHED)
+        )
+        == "🌟 今天点满了，明天再来"
+    )
+    assert (
+        matcher.build_like_me_message(
+            LikeResult(user_id=1, status=LikeStatus.FAILED)
+        )
+        == "💥 手滑了，没赞上"
+    )
+
+
+def test_build_like_other_message_uses_colloquial_copy():
+    not_friend = cast(
+        Message,
+        matcher.build_like_other_message(
+            582933105,
+            LikeResult(user_id=582933105, status=LikeStatus.NOT_FRIEND),
+        ),
+    )
+    assert [segment.type for segment in not_friend] == ["text", "at", "text"]
+    assert not_friend[0].data["text"] == "🙄 先让 "
+    assert not_friend[1].data["qq"] == "582933105"
+    assert not_friend[2].data["text"] == " 加我好友，不然没法赞"
+
+    success = cast(
+        Message,
+        matcher.build_like_other_message(
+            582933105,
+            LikeResult(
+                user_id=582933105,
+                status=LikeStatus.SUCCESS,
+                total=30,
+            ),
+        ),
+    )
+    assert [segment.type for segment in success] == ["text", "at", "text"]
+    assert success[0].data["text"] == "👍 已经帮你给 "
+    assert success[1].data["qq"] == "582933105"
+    assert success[2].data["text"] == " 点了 30 个赞"
+
+    limit_reached = cast(
+        Message,
+        matcher.build_like_other_message(
+            582933105,
+            LikeResult(user_id=582933105, status=LikeStatus.LIMIT_REACHED),
+        ),
+    )
+    assert [segment.type for segment in limit_reached] == ["text", "at", "text"]
+    assert limit_reached[0].data["text"] == "🌟 今天给 "
+    assert limit_reached[1].data["qq"] == "582933105"
+    assert limit_reached[2].data["text"] == " 的赞已经点满了喵～"
+
+    assert (
+        matcher.build_like_other_message(
+            582933105,
+            LikeResult(user_id=582933105, status=LikeStatus.FAILED),
+        )
+        == "💥 手滑了，没赞上"
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_like_other_without_target_uses_new_hint(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    event = fake_group_message_event_v11(
+        message=Message("赞他"),
+        raw_message="赞他",
+    )
+    captured: list[str] = []
+
+    class StopHandling(Exception):
+        pass
+
+    async def fake_finish(message: str):
+        captured.append(message)
+        raise StopHandling
+
+    monkeypatch.setattr(matcher.like_other, "finish", fake_finish)
+
+    with pytest.raises(StopHandling):
+        await matcher.handle_like_other(
+            cast(Bot, cast(object, SimpleNamespace())),
+            event,
+        )
+
+    assert captured == ["🤡 赞谁啊？直接说「赞他 QQ 号」或者「赞他 @群友」"]
+
+
+def test_build_daily_like_messages(fixed_now: datetime):
+    renewed_without_friend = matcher.build_subscribe_message(
+        SubscriptionResult(
+            user_id=582933105,
+            status=SubscriptionStatus.RENEWED,
+            require_friend=True,
+            is_friend=False,
+        )
+    )
+    assert renewed_without_friend == "🔁 每日赞给你续上了，没加好友可能点不上"
+
+    renewed = matcher.build_subscribe_message(
+        SubscriptionResult(
+            user_id=582933105,
+            status=SubscriptionStatus.RENEWED,
+        )
+    )
+    assert renewed == "🔁 每日赞给你续上了"
+
+    subscribed_without_friend = matcher.build_subscribe_message(
+        SubscriptionResult(
+            user_id=582933105,
+            status=SubscriptionStatus.SUBSCRIBED,
+            require_friend=True,
+            is_friend=False,
+        )
+    )
+    assert subscribed_without_friend == "👍 每日赞给你开好了，没加好友可能点不上"
+
+    subscribed = matcher.build_subscribe_message(
+        SubscriptionResult(
+            user_id=582933105,
+            status=SubscriptionStatus.SUBSCRIBED,
+        )
+    )
+    assert subscribed == "👍 每日赞给你开好了"
+
+    failed = matcher.build_subscribe_message(
+        SubscriptionResult(
+            user_id=582933105,
+            status=SubscriptionStatus.NOT_SUBSCRIBED,
+        )
+    )
+    assert failed == "💥 失败了喵～请稍后再试"
+
+    assert (
+        matcher.build_unsubscribe_message(
+            SubscriptionResult(
+                user_id=582933105,
+                status=SubscriptionStatus.UNSUBSCRIBED,
+            )
+        )
+        == "👌 每日赞给你关了"
+    )
+    assert (
+        matcher.build_unsubscribe_message(
+            SubscriptionResult(
+                user_id=582933105,
+                status=SubscriptionStatus.NOT_SUBSCRIBED,
+            )
+        )
+        == "💢 你这边本来就没开每日赞"
+    )
+
+    assert (
+        matcher.build_status_message(
+            SubscriptionResult(
+                user_id=582933105,
+                status=SubscriptionStatus.EMPTY,
+                is_superuser_view=True,
+            )
+        )
+        == "📭 现在没人开着每日赞"
+    )
+    assert (
+        matcher.build_status_message(
+            SubscriptionResult(
+                user_id=582933105,
+                status=SubscriptionStatus.EMPTY,
+            )
+        )
+        == "📭 你这边还没开每日赞"
+    )
+
+    list_record = SubscriptionRecord(
+        user_id=582933105,
+        created_at=fixed_now,
+        last_trigger_at=fixed_now,
+        expires_at=fixed_now + timedelta(days=7),
+    )
+    assert (
+        matcher.build_status_message(
+            SubscriptionResult(
+                user_id=1,
+                status=SubscriptionStatus.STATUS_LIST,
+                records=[list_record],
+            )
+        )
+        == "📋 天天赞列表：\n582933105 到期：2026-04-15"
+    )
+
+    single_record = SubscriptionRecord(
+        user_id=582933105,
+        created_at=fixed_now,
+        last_trigger_at=fixed_now,
+        expires_at=fixed_now + timedelta(days=7),
+        last_like_at=fixed_now - timedelta(days=1),
+    )
+    assert (
+        matcher.build_status_message(
+            SubscriptionResult(
+                user_id=582933105,
+                status=SubscriptionStatus.STATUS_SINGLE,
+                record=single_record,
+            )
+        )
+        == "\n".join(
+            [
+                "📌 你的每日赞情况：",
+                "QQ：582933105",
+                "到期：2026-04-15",
+                "上次点赞：2026-04-07",
+            ]
+        )
+    )
+
+    no_like_record = SubscriptionRecord(
+        user_id=582933105,
+        created_at=fixed_now,
+        last_trigger_at=fixed_now,
+        expires_at=fixed_now + timedelta(days=7),
+    )
+    assert (
+        matcher.build_status_message(
+            SubscriptionResult(
+                user_id=582933105,
+                status=SubscriptionStatus.STATUS_SINGLE,
+                record=no_like_record,
+            )
+        )
+        == "\n".join(
+            [
+                "📌 你的每日赞情况：",
+                "QQ：582933105",
+                "到期：2026-04-15",
+                "上次点赞：还没有",
+            ]
+        )
+    )
+
+    assert (
+        matcher.build_status_message(
+            SubscriptionResult(
+                user_id=582933105,
+                status=SubscriptionStatus.NOT_SUBSCRIBED,
+            )
+        )
+        == "💥 我这边没查到，你再试一次"
+    )

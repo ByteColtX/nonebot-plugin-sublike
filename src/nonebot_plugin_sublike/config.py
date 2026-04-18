@@ -8,14 +8,14 @@ class Config(BaseModel):
     """插件配置模型。"""
 
     sublike_cmd_me: tuple[str, ...] = ("赞我", "草我", "超我")
-    sublike_cmd_sub: tuple[str, ...] = ("订阅赞", "天天赞我")
-    sublike_cmd_unsub: tuple[str, ...] = ("取消订阅赞", "订阅赞取消")
+    sublike_cmd_sub: tuple[str, ...] = ("每日赞", "天天赞我")
+    sublike_cmd_unsub: tuple[str, ...] = ("取消每日赞", "每日赞取消")
     sublike_cmd_status: tuple[str, ...] = (
-        "订阅赞查看",
-        "查看订阅赞",
-        "订阅赞状态",
-        "订阅赞查询",
-        "查询订阅赞",
+        "每日赞查看",
+        "查看每日赞",
+        "每日赞状态",
+        "每日赞查询",
+        "查询每日赞",
     )
     sublike_cmd_other: tuple[str, ...] = (
         "赞ta",

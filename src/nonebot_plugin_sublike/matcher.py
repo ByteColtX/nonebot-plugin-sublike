@@ -118,12 +118,12 @@ def build_like_me_message(result: LikeResult) -> str:
     """生成“赞我”回复文案。"""
 
     if result.status == LikeStatus.NOT_FRIEND:
-        return "⚠️ 需要先加好友才能点赞"
+        return "🙄 不加好友不赞"
     if result.status == LikeStatus.SUCCESS:
-        return f"👍 已经给你点了 {result.total} 个赞"
+        return f"👍 给你点了 {result.total} 个赞"
     if result.status == LikeStatus.LIMIT_REACHED:
-        return "🌟 今天赞不了你更多了喵~"
-    return "💥 点赞失败了喵~"
+        return "🌟 今天点满了，明天再来"
+    return "💥 手滑了，没赞上"
 
 
 def build_like_other_message(
@@ -135,16 +135,16 @@ def build_like_other_message(
     if result.status == LikeStatus.NOT_FRIEND:
         return Message(
             [
-                MessageSegment.text("⚠️ 请先让 "),
+                MessageSegment.text("🙄 先让 "),
                 MessageSegment.at(target_user_id),
-                MessageSegment.text(" 添加机器人为好友后再点赞"),
+                MessageSegment.text(" 加我好友，不然没法赞"),
             ]
         )
 
     if result.status == LikeStatus.SUCCESS:
         return Message(
             [
-                MessageSegment.text("👍 已经给 "),
+                MessageSegment.text("👍 已经帮你给 "),
                 MessageSegment.at(target_user_id),
                 MessageSegment.text(f" 点了 {result.total} 个赞"),
             ]
@@ -153,13 +153,13 @@ def build_like_other_message(
     if result.status == LikeStatus.LIMIT_REACHED:
         return Message(
             [
-                MessageSegment.text("🌟 今天赞不了 "),
+                MessageSegment.text("🌟 今天给 "),
                 MessageSegment.at(target_user_id),
-                MessageSegment.text(" 更多了喵~"),
+                MessageSegment.text(" 的赞已经点满了喵～"),
             ]
         )
 
-    return "💥 点赞失败了喵~"
+    return "💥 手滑了，没赞上"
 
 
 def build_subscribe_message(result: SubscriptionResult) -> str:
@@ -167,23 +167,23 @@ def build_subscribe_message(result: SubscriptionResult) -> str:
 
     if result.status == SubscriptionStatus.RENEWED:
         if result.require_friend and result.is_friend is False:
-            return "🔁 订阅赞已续期，但当前你还不是机器人好友，定时点赞可能不会生效"
-        return "🔁 订阅赞已续期"
+            return "🔁 每日赞给你续上了，没加好友可能点不上"
+        return "🔁 每日赞给你续上了"
 
     if result.status == SubscriptionStatus.SUBSCRIBED:
         if result.require_friend and result.is_friend is False:
-            return "👍 订阅赞成功，但当前你还不是机器人好友，定时点赞可能不会生效"
-        return "👍 订阅赞成功"
+            return "👍 每日赞给你开好了，没加好友可能点不上"
+        return "👍 每日赞给你开好了"
 
-    return "💥 订阅处理失败"
+    return "💥 失败了喵～请稍后再试"
 
 
 def build_unsubscribe_message(result: SubscriptionResult) -> str:
     """生成取消订阅回复文案。"""
 
     if result.status == SubscriptionStatus.UNSUBSCRIBED:
-        return "👎 已取消订阅赞"
-    return "💢 你当前没有订阅赞"
+        return "👌 每日赞给你关了"
+    return "💢 你这边本来就没开每日赞"
 
 
 def build_status_message(result: SubscriptionResult) -> str:
@@ -191,28 +191,28 @@ def build_status_message(result: SubscriptionResult) -> str:
 
     if result.status == SubscriptionStatus.EMPTY:
         if result.is_superuser_view:
-            return "📭 当前没有有效订阅"
-        return "📭 你当前没有有效订阅"
+            return "📭 现在没人开着每日赞"
+        return "📭 你这边还没开每日赞"
 
     if result.status == SubscriptionStatus.STATUS_LIST:
-        lines = ["📋 当前有效订阅："]
+        lines = ["📋 天天赞列表："]
         for record in result.records:
-            lines.append(f"{record.user_id} 到期于 {record.expires_at:%Y-%m-%d}")
+            lines.append(f"{record.user_id} 到期：{record.expires_at:%Y-%m-%d}")
         return "\n".join(lines)
 
     if result.status == SubscriptionStatus.STATUS_SINGLE and result.record is not None:
         lines = [
-            "📌 你的订阅状态：",
+            "📌 你的每日赞情况：",
             f"QQ：{result.record.user_id}",
-            f"到期时间：{result.record.expires_at:%Y-%m-%d}",
+            f"到期：{result.record.expires_at:%Y-%m-%d}",
         ]
         if result.record.last_like_at is not None:
-            lines.append(f"最近点赞：{result.record.last_like_at:%Y-%m-%d}")
+            lines.append(f"上次点赞：{result.record.last_like_at:%Y-%m-%d}")
         else:
-            lines.append("最近点赞：暂无")
+            lines.append("上次点赞：还没有")
         return "\n".join(lines)
 
-    return "💥 查询订阅状态失败"
+    return "💥 我这边没查到，你再试一次"
 
 
 like_me = on_message(rule=Rule(is_like_me), priority=5, block=True)
@@ -240,7 +240,7 @@ async def handle_like_other(bot: Bot, event: GroupMessageEvent):
 
     target_user_id = extract_target_user_id(event)
     if target_user_id is None:
-        await like_other.finish("🤡 请提供有效的 QQ 号或 @目标用户")
+        await like_other.finish("🤡 赞谁啊？直接说「赞他 QQ 号」或者「赞他 @群友」")
 
     result = await handle_instant_like(
         bot,
